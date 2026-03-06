@@ -14,6 +14,8 @@ Drop the `.lua` files into your `koreader/patches/` directory. Place all the ico
 
 ### 2-custom-titlebar.lua
 
+![photo](./assets/titlebar.png)
+
 Replaces the default "KOReader" title with a custom status bar showing device info.
 
 **Left side:** Device name (configurable, defaults to device model)
@@ -37,6 +39,8 @@ Replaces the default "KOReader" title with a custom status bar showing device in
 - Works in both portrait and landscape orientation
 
 ### 2-custom-navbar.lua
+
+![photo](./assets/navbar.png)
 
 Adds a tab bar at the bottom of the File Manager with configurable tabs:
 
