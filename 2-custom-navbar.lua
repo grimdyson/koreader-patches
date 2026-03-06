@@ -141,8 +141,9 @@ end
 
 local active_tab = "books"
 
--- Forward declaration; defined later
+-- Forward declarations; defined later
 local injectNavbar
+local injectStandaloneNavbar
 
 local function setActiveTab(id)
     active_tab = id
@@ -548,7 +549,7 @@ local function createNavBar()
     return navbar
 end
 
--- === Hook Menu:init() to reduce FileChooser height ===
+-- === Hook Menu:init() to reduce height for FM and standalone views ===
 
 local Menu = require("ui/widget/menu")
 
@@ -557,10 +558,31 @@ local function getNavbarHeight()
     return nb and nb:getSize().h or 0
 end
 
+-- Standalone views (History, Favorites, Collections) that should get navbar
+local standalone_view_names = {
+    history = true,
+    collections = true,
+}
+
+local function isStandaloneNavbarView(menu)
+    if standalone_view_names[menu.name] then return true end
+    -- Collections list has no name but has these flags
+    if not menu.name and menu.covers_fullscreen and menu.is_borderless and menu.title_bar_fm_style then
+        return true
+    end
+    return false
+end
+
+-- Flag to skip navbar for nested views (e.g. collection opened from collections list)
+-- or selection-mode dialogs (e.g. "add to collection")
+local _skip_standalone_navbar = false
+
 local orig_menu_init = Menu.init
 
 function Menu:init()
     if self.name == "filemanager" and not self.height then
+        self.height = Screen:getHeight() - getNavbarHeight()
+    elseif not _skip_standalone_navbar and isStandaloneNavbarView(self) and not self.height then
         self.height = Screen:getHeight() - getNavbarHeight()
     end
     orig_menu_init(self)
@@ -650,6 +672,71 @@ injectNavbar = function(fm)
     }
 end
 
+-- === Inject navbar into standalone views (History, Favorites, Collections) ===
+
+injectStandaloneNavbar = function(menu, view_tab_id)
+    if not menu or not menu[1] then return end
+
+    -- Temporarily highlight the view's tab
+    local saved_active = active_tab
+    active_tab = view_tab_id
+    local navbar = createNavBar()
+    active_tab = saved_active
+
+    if not navbar then return end
+
+    -- Override tap handler for standalone view context
+    navbar.onTapNavBar = function(self_nb, _, ges)
+        if not self_nb.dimen or not self_nb.dimen:contains(ges.pos) then
+            return false
+        end
+        local vis_tabs = getVisibleTabs()
+        if #vis_tabs == 0 then return false end
+        local screen_w = Screen:getWidth()
+        local inner_w = screen_w - navbar_h_padding * 2
+        local tab_w_local = math.floor(inner_w / #vis_tabs)
+        local tap_x = ges.pos.x - navbar_h_padding
+        local idx = math.floor(tap_x / tab_w_local) + 1
+        idx = math.max(1, math.min(#vis_tabs, idx))
+        local tapped_id = vis_tabs[idx].id
+
+        -- Already in this view, do nothing
+        if tapped_id == view_tab_id then
+            return true
+        end
+
+        -- Close this standalone view first
+        if menu.close_callback then
+            menu.close_callback()
+        end
+
+        -- Execute the tapped tab's callback
+        local cb = tab_callbacks[tapped_id]
+        if cb then cb() end
+
+        return true
+    end
+
+    -- Expand dimen to full screen so gestures and repaints cover the navbar area
+    menu.dimen.h = Screen:getHeight()
+
+    -- Wrap FrameContainer with navbar below, using a FrameContainer with white
+    -- background so the FM's navbar (painted underneath) doesn't bleed through
+    -- the transparent navbar_top_gap spacer.
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    menu[1] = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        margin = 0,
+        VerticalGroup:new{
+            align = "left",
+            menu[1],
+            navbar,
+        },
+    }
+end
+
 local orig_setupLayout = FileManager.setupLayout
 
 function FileManager:setupLayout()
@@ -664,6 +751,54 @@ function FileManager:setupLayout()
         injectNavbar(fm)
         UIManager:setDirty(fm, "ui")
     end)
+end
+
+-- === Hook standalone views to inject navbar after creation ===
+-- Injection happens after UIManager:show() in the same execution frame,
+-- so the first paint uses the modified widget tree. No setDirty needed.
+
+local FileManagerHistory = require("apps/filemanager/filemanagerhistory")
+local orig_onShowHist = FileManagerHistory.onShowHist
+
+function FileManagerHistory:onShowHist(search_info)
+    local result = orig_onShowHist(self, search_info)
+    if self.booklist_menu then
+        injectStandaloneNavbar(self.booklist_menu, "history")
+    end
+    return result
+end
+
+local FileManagerCollection = require("apps/filemanager/filemanagercollection")
+local orig_onShowColl = FileManagerCollection.onShowColl
+
+function FileManagerCollection:onShowColl(collection_name)
+    -- If coll_list exists, this is a nested view (collection opened from collections list)
+    local is_nested = self.coll_list ~= nil
+    if is_nested then
+        _skip_standalone_navbar = true
+    end
+    local result = orig_onShowColl(self, collection_name)
+    _skip_standalone_navbar = false
+    if self.booklist_menu and not is_nested then
+        injectStandaloneNavbar(self.booklist_menu, "favorites")
+    end
+    return result
+end
+
+local orig_onShowCollList = FileManagerCollection.onShowCollList
+
+function FileManagerCollection:onShowCollList(file_or_selected_collections, caller_callback, no_dialog)
+    -- Skip navbar in selection mode (adding file to collection, filtering by collection)
+    if file_or_selected_collections ~= nil then
+        _skip_standalone_navbar = true
+    end
+    local result = orig_onShowCollList(self, file_or_selected_collections, caller_callback, no_dialog)
+    _skip_standalone_navbar = false
+    -- Only inject navbar in browse mode, not selection mode
+    if self.coll_list and file_or_selected_collections == nil then
+        injectStandaloneNavbar(self.coll_list, "collections")
+    end
+    return result
 end
 
 -- === Settings menu ===
