@@ -144,13 +144,14 @@ local active_tab = "books"
 -- Forward declarations; defined later
 local injectNavbar
 local injectStandaloneNavbar
+local hookQuickRSSInit
 
 local function setActiveTab(id)
     active_tab = id
     local fm = FileManager.instance
     if fm then
         injectNavbar(fm)
-        UIManager:setDirty(fm, "ui")
+        UIManager:setDirty(fm, "full")
     end
 end
 
@@ -210,6 +211,7 @@ local function onTabNews()
     end
 
     -- Default: open QuickRSS
+    hookQuickRSSInit()
     local ok, QuickRSSUI = pcall(require, "modules/ui/feed_view")
     if ok and QuickRSSUI then
         UIManager:show(QuickRSSUI:new{})
@@ -460,7 +462,7 @@ local function getVisibleTabs()
     return visible
 end
 
-local function createNavBar()
+local function createNavBar(no_top_gap)
     -- Update books tab label from config
     tabs_by_id["books"].label = getBooksLabel()
 
@@ -501,10 +503,14 @@ local function createNavBar()
             },
             row_with_padding,
         }
-        table.insert(visual_children, VerticalSpan:new{ width = navbar_top_gap })
+        if not no_top_gap then
+            table.insert(visual_children, VerticalSpan:new{ width = navbar_top_gap })
+        end
         table.insert(visual_children, separator_and_row)
     else
-        table.insert(visual_children, VerticalSpan:new{ width = navbar_top_gap })
+        if not no_top_gap then
+            table.insert(visual_children, VerticalSpan:new{ width = navbar_top_gap })
+        end
         table.insert(visual_children, row_with_padding)
     end
 
@@ -553,15 +559,22 @@ end
 
 local Menu = require("ui/widget/menu")
 
-local function getNavbarHeight()
-    local nb = createNavBar()
+local function getNavbarHeight(no_top_gap)
+    local nb = createNavBar(no_top_gap)
     return nb and nb:getSize().h or 0
 end
 
--- Standalone views (History, Favorites, Collections) that should get navbar
+-- Standalone views (History, Favorites, Collections, Rakuyomi) that should get navbar
 local standalone_view_names = {
     history = true,
     collections = true,
+    library_view = true, -- Rakuyomi
+}
+
+-- Views where we inject navbar via nextTick in Menu:init
+-- (plugin views that can't be hooked via show functions)
+local standalone_nexttick_tab_ids = {
+    library_view = "manga",
 }
 
 local function isStandaloneNavbarView(menu)
@@ -582,10 +595,26 @@ local orig_menu_init = Menu.init
 function Menu:init()
     if self.name == "filemanager" and not self.height then
         self.height = Screen:getHeight() - getNavbarHeight()
-    elseif not _skip_standalone_navbar and isStandaloneNavbarView(self) and not self.height then
-        self.height = Screen:getHeight() - getNavbarHeight()
+    elseif not _skip_standalone_navbar and isStandaloneNavbarView(self) then
+        -- Override height even if already set (e.g. Rakuyomi sets height = screen_h)
+        -- Use no_top_gap=true since standalone navbars skip the top gap
+        self.height = Screen:getHeight() - getNavbarHeight(true)
+        -- Force borderless for plugin views that forgot to set it (e.g. Rakuyomi)
+        if not self.is_borderless then
+            self.is_borderless = true
+        end
     end
     orig_menu_init(self)
+    -- Plugin views (e.g. Rakuyomi) can't be hooked via show functions,
+    -- so inject navbar via nextTick from here. Hide-pagination doesn't
+    -- apply to these views so there's no ordering conflict.
+    local nexttick_tab_id = standalone_nexttick_tab_ids[self.name]
+    if nexttick_tab_id then
+        local menu = self
+        UIManager:nextTick(function()
+            injectStandaloneNavbar(menu, nexttick_tab_id)
+        end)
+    end
 end
 
 -- === Auto-switch active tab on folder change ===
@@ -626,7 +655,7 @@ function FileManager:onPathChanged(path)
     if new_tab and new_tab ~= active_tab then
         active_tab = new_tab
         injectNavbar(self)
-        UIManager:setDirty(self, "ui")
+        UIManager:setDirty(self, "full")
     end
 end
 
@@ -680,7 +709,7 @@ injectStandaloneNavbar = function(menu, view_tab_id)
     -- Temporarily highlight the view's tab
     local saved_active = active_tab
     active_tab = view_tab_id
-    local navbar = createNavBar()
+    local navbar = createNavBar(true)
     active_tab = saved_active
 
     if not navbar then return end
@@ -708,7 +737,14 @@ injectStandaloneNavbar = function(menu, view_tab_id)
         -- Close this standalone view first
         if menu.close_callback then
             menu.close_callback()
+        elseif menu.onClose then
+            menu:onClose()
+        else
+            UIManager:close(menu)
         end
+
+        -- Update FM navbar active tab
+        setActiveTab(tapped_id)
 
         -- Execute the tapped tab's callback
         local cb = tab_callbacks[tapped_id]
@@ -799,6 +835,97 @@ function FileManagerCollection:onShowCollList(file_or_selected_collections, call
         injectStandaloneNavbar(self.coll_list, "collections")
     end
     return result
+end
+
+-- === Hook QuickRSS feed view to inject navbar ===
+-- QuickRSS extends InputContainer (not Menu), so Menu:init() hook doesn't apply.
+-- We hook its init lazily on first use since the plugin path isn't available at patch load time.
+
+local _qrss_hooked = false
+
+hookQuickRSSInit = function()
+    if _qrss_hooked then return end
+    local ok, QuickRSSUI_class = pcall(require, "modules/ui/feed_view")
+    if not ok or not QuickRSSUI_class then return end
+    _qrss_hooked = true
+
+    local ok_ai, ArticleItemModule = pcall(require, "modules/ui/article_item")
+    local QRSS_ITEM_HEIGHT = ok_ai and ArticleItemModule.ITEM_HEIGHT
+
+    local orig_qrss_init = QuickRSSUI_class.init
+    function QuickRSSUI_class:init()
+        orig_qrss_init(self)
+
+        local navbar_h = getNavbarHeight(true)
+        if navbar_h <= 0 then return end
+
+        -- Reduce the outer FrameContainer height
+        self[1].height = self[1].height - navbar_h
+
+        -- Reduce the article list area and recalculate items per page
+        self.list_h = self.list_h - navbar_h
+        if QRSS_ITEM_HEIGHT then
+            self.items_per_page = math.max(1, math.floor(self.list_h / QRSS_ITEM_HEIGHT))
+        end
+
+        -- Inject navbar below the QuickRSS view
+        local saved_active = active_tab
+        active_tab = "news"
+        local navbar = createNavBar(true)
+        active_tab = saved_active
+        if not navbar then return end
+
+        -- Override tap handler for standalone view context
+        navbar.onTapNavBar = function(self_nb, _, ges)
+            if not self_nb.dimen or not self_nb.dimen:contains(ges.pos) then
+                return false
+            end
+            local vis_tabs = getVisibleTabs()
+            if #vis_tabs == 0 then return false end
+            local screen_w = Screen:getWidth()
+            local inner_w = screen_w - navbar_h_padding * 2
+            local tab_w_local = math.floor(inner_w / #vis_tabs)
+            local tap_x = ges.pos.x - navbar_h_padding
+            local idx = math.floor(tap_x / tab_w_local) + 1
+            idx = math.max(1, math.min(#vis_tabs, idx))
+            local tapped_id = vis_tabs[idx].id
+            if tapped_id == "news" then return true end
+            self:onClose()
+            setActiveTab(tapped_id)
+            local cb = tab_callbacks[tapped_id]
+            if cb then cb() end
+            return true
+        end
+
+        -- Wrap with navbar below, opaque background to prevent bleed-through
+        local FrameContainer = require("ui/widget/container/framecontainer")
+        self[1] = FrameContainer:new{
+            background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 0,
+            margin = 0,
+            VerticalGroup:new{
+                align = "left",
+                self[1],
+                navbar,
+            },
+        }
+
+        -- Set dimen to full screen for gesture handling and setDirty
+        self.dimen = Geom:new{ w = Screen:getWidth(), h = Screen:getHeight() }
+
+        -- Re-populate with corrected items_per_page
+        if #self.articles > 0 then
+            self:_populateItems()
+        end
+    end
+
+    local orig_qrss_onClose = QuickRSSUI_class.onClose
+    function QuickRSSUI_class:onClose()
+        orig_qrss_onClose(self)
+        -- Reset FM navbar to "books" when QuickRSS closes via its own close button
+        setActiveTab("books")
+    end
 end
 
 -- === Settings menu ===
