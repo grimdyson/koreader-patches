@@ -40,7 +40,9 @@ function Menu:init()
     -- to always use bottom_height = 0 for this instance.
     -- MosaicMenu also checks self.page_info:getSize().h in its override,
     -- so we nil that too during recalculation.
-    local orig_recalc = self._recalculateDimen
+    -- We look up the class method dynamically (not captured at init time)
+    -- because coverbrowser replaces _recalculateDimen on the class when
+    -- switching between mosaic/list/classic display modes.
     self._recalculateDimen = function(self_inner, no_recalculate_dimen)
         local saved_arrow = self_inner.page_return_arrow
         local saved_text = self_inner.page_info_text
@@ -48,7 +50,11 @@ function Menu:init()
         self_inner.page_return_arrow = nil
         self_inner.page_info_text = nil
         self_inner.page_info = nil
-        orig_recalc(self_inner, no_recalculate_dimen)
+        -- Temporarily remove instance override to call the current class method
+        local instance_fn = self_inner._recalculateDimen
+        self_inner._recalculateDimen = nil
+        self_inner:_recalculateDimen(no_recalculate_dimen)
+        self_inner._recalculateDimen = instance_fn
         self_inner.page_return_arrow = saved_arrow
         self_inner.page_info_text = saved_text
         self_inner.page_info = saved_info
