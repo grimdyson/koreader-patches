@@ -6,18 +6,16 @@ Here's how they look on my Kobo Libra Colour!
 
 ![photo](./assets/photo.jpeg)
 
+If you like these patches and want to support me, consider getting me a coffee! :D
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B8FQ871)
+
 > [!WARNING]
 > These patches may or may not work with Project Title, I don't use it myself so compatibility is NOT tested.
 
 ## Installation
 
 Drop the `.lua` files into your `koreader/patches/` directory. Place all the icons in the `icons/` folder in your KOReader `icons/` directory.
-
-## Patch Settings
-
-The Titlebar and Navbar patches can be configured from their respective settings under the first KOReader menu tab.
-
-![settings](./assets/settings.png)
 
 ## Patches
 
@@ -127,6 +125,16 @@ Adds a Quick Settings tab as the first tab in the KOReader top menu. Provides fa
 Removes the pagination bar (`« < Page 1 of 2 > »`) from the file browser, history, favorites, and collections views. The mosaic/list grid stretches to fill the reclaimed space. Swipe gestures for page navigation still work.
 
 </details>
+
+## Patch Settings
+
+The Titlebar and Navbar patches can be configured from their respective settings under the first KOReader menu tab.
+
+![settings](./assets/settings.png)
+
+The Quick Settings patch can be configured from "Settings" (Gear icon) -> "Quick settings".
+
+![settings_quicksettings](./assets/settings2.png)
 
 ## Deploy Script
 
