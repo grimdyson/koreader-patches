@@ -30,12 +30,17 @@ local Screen = Device.screen
 -- ============================================================
 
 local config_default = {
-    button_order = { "wifi", "night", "rotate", "usb", "restart", "exit", "sleep" },
+    button_order = { "wifi", "night", "rotate", "usb", "search", "quickrss", "cloud", "zlibrary", "calibre", "restart", "exit", "sleep" },
     show_buttons = {
         wifi = true,
         night = true,
         rotate = true,
         usb = true,
+        search = false,
+        quickrss = false,
+        cloud = false,
+        zlibrary = false,
+        calibre = false,
         restart = true,
         exit = true,
         sleep = true,
@@ -182,6 +187,72 @@ local button_defs = {
             end
         end,
     },
+    search = {
+        icon = "quick_search",
+        label = "Search",
+        callback = function()
+            UIManager:broadcastEvent(Event:new("ShowFileSearch"))
+        end,
+    },
+    quickrss = {
+        icon = "quick_quickrss",
+        label = "QuickRSS",
+        callback = function()
+            local ok, QuickRSSUI = pcall(require, "modules/ui/feed_view")
+            if ok and QuickRSSUI then
+                local view = QuickRSSUI:new{}
+                UIManager:show(view)
+                view:_fetch()
+            else
+                local InfoMessage = require("ui/widget/infomessage")
+                UIManager:show(InfoMessage:new{
+                    text = _("QuickRSS plugin is not installed."),
+                })
+            end
+        end,
+    },
+    cloud = {
+        icon = "quick_cloud",
+        label = "Cloud",
+        callback = function()
+            UIManager:broadcastEvent(Event:new("ShowCloudStorage"))
+        end,
+    },
+    zlibrary = {
+        icon = "quick_zlib",
+        label = "Z-Lib",
+        callback = function()
+            UIManager:broadcastEvent(Event:new("ZlibrarySearch"))
+        end,
+    },
+    calibre = {
+        icon = "quick_calibre",
+        label = "Calibre",
+        active_func = function()
+            local ok, CalibreWireless = pcall(require, "calibre/wireless")
+            return ok and CalibreWireless and CalibreWireless.calibre_socket ~= nil
+        end,
+        callback = function(touch_menu)
+            local ok, CalibreWireless = pcall(require, "calibre/wireless")
+            if not ok or not CalibreWireless then
+                local InfoMessage = require("ui/widget/infomessage")
+                UIManager:show(InfoMessage:new{
+                    text = _("Calibre plugin is not available."),
+                })
+                return
+            end
+            if not CalibreWireless.calibre_socket then
+                CalibreWireless:connect()
+            else
+                CalibreWireless:disconnect()
+            end
+            UIManager:scheduleIn(1, function()
+                if touch_menu.item_table and touch_menu.item_table.panel then
+                    touch_menu:updateItems(1)
+                end
+            end)
+        end,
+    },
 }
 
 -- Display names for the settings menu
@@ -193,6 +264,11 @@ local button_display_names = {
     restart = _("Restart"),
     exit = _("Exit"),
     sleep = _("Sleep"),
+    search = _("File search"),
+    quickrss = _("QuickRSS"),
+    cloud = _("Cloud storage"),
+    zlibrary = _("Z-Library"),
+    calibre = _("Calibre"),
 }
 
 -- ============================================================

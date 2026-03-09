@@ -1340,4 +1340,8 @@ function FileManagerMenu:setUpdateItemTable()
     }
 
     orig_setUpdateItemTable(self)
+
+    -- Hook QuickRSS init eagerly now that plugins are loaded,
+    -- so the navbar appears regardless of how QuickRSS is opened
+    hookQuickRSSInit()
 end

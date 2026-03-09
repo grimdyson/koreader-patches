@@ -101,6 +101,7 @@ Adds a Quick Settings tab as the first tab in the KOReader top menu. Provides fa
 - Night mode (active indicator when enabled)
 - Rotate screen
 - USB mass storage
+- Calibre wireless connection (active indicator when connected, disabled by default)
 - Restart (with confirmation)
 - Exit (with confirmation)
 - Sleep/Suspend
