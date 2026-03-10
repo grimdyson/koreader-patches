@@ -238,27 +238,18 @@ local button_defs = {
         icon = "quick_calibre",
         label = "Calibre",
         active_func = function()
-            local ok, CalibreWireless = pcall(require, "calibre/wireless")
-            return ok and CalibreWireless and CalibreWireless.calibre_socket ~= nil
+            local CW = package.loaded["wireless"]
+            return CW ~= nil and CW.calibre_socket ~= nil
         end,
         callback = function(touch_menu)
-            local ok, CalibreWireless = pcall(require, "calibre/wireless")
-            if not ok or not CalibreWireless then
-                local InfoMessage = require("ui/widget/infomessage")
-                UIManager:show(InfoMessage:new{
-                    text = _("Calibre plugin is not available."),
-                })
-                return
-            end
-            if not CalibreWireless.calibre_socket then
-                CalibreWireless:connect()
+            local CW = package.loaded["wireless"]
+            if CW and CW.calibre_socket ~= nil then
+                UIManager:broadcastEvent(Event:new("CloseWirelessConnection"))
             else
-                CalibreWireless:disconnect()
+                UIManager:broadcastEvent(Event:new("StartWirelessConnection"))
             end
             UIManager:scheduleIn(1, function()
-                if touch_menu.item_table and touch_menu.item_table.panel then
-                    touch_menu:updateItems(1)
-                end
+                touch_menu:updateItems(1)
             end)
         end,
     },
