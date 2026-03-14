@@ -45,8 +45,10 @@ local config_default = {
         favorites = false,
         collections = false,
         exit = false,
+        page_left = false,
+        page_right = false,
     },
-    tab_order = { "books", "manga", "news", "continue", "history", "favorites", "collections", "exit" },
+    tab_order = { "page_left", "books", "manga", "news", "continue", "history", "favorites", "collections", "exit", "page_right" },
     show_labels = true,
     show_top_border = true,
     books_label = "Books",
@@ -143,6 +145,16 @@ local tabs = {
         id = "exit",
         label = _("Exit"),
         icon = "tab_exit",
+    },
+    {
+        id = "page_left",
+        label = _("Prev"),
+        icon = "tab_left",
+    },
+    {
+        id = "page_right",
+        label = _("Next"),
+        icon = "tab_right",
     },
 }
 
@@ -278,6 +290,20 @@ local function onTabExit()
     end
 end
 
+local function onTabPageLeft()
+    local fm = FileManager.instance
+    if fm and fm.file_chooser then
+        fm.file_chooser:onPrevPage()
+    end
+end
+
+local function onTabPageRight()
+    local fm = FileManager.instance
+    if fm and fm.file_chooser then
+        fm.file_chooser:onNextPage()
+    end
+end
+
 local tab_callbacks = {
     books = onTabBooks,
     manga = onTabManga,
@@ -287,6 +313,8 @@ local tab_callbacks = {
     favorites = onTabFavorites,
     collections = onTabCollections,
     exit = onTabExit,
+    page_left = onTabPageLeft,
+    page_right = onTabPageRight,
 }
 
 -- === Color text support ===
@@ -1308,6 +1336,22 @@ function FileManagerMenu:setUpdateItemTable()
                         checked_func = function() return config.show_tabs.exit end,
                         callback = function()
                             config.show_tabs.exit = not config.show_tabs.exit
+                            G_reader_settings:saveSetting("bottom_navbar", config)
+                        end,
+                    },
+                    {
+                        text = _("Previous page"),
+                        checked_func = function() return config.show_tabs.page_left end,
+                        callback = function()
+                            config.show_tabs.page_left = not config.show_tabs.page_left
+                            G_reader_settings:saveSetting("bottom_navbar", config)
+                        end,
+                    },
+                    {
+                        text = _("Next page"),
+                        checked_func = function() return config.show_tabs.page_right end,
+                        callback = function()
+                            config.show_tabs.page_right = not config.show_tabs.page_right
                             G_reader_settings:saveSetting("bottom_navbar", config)
                         end,
                     },
