@@ -1,8 +1,8 @@
 # KOReader Patches
 
-Forked from [qewer33's KOReader Patches](https://github.com/qewer33/koreader-patches). The original repo has a lot more going on, including a custom navbar and extra configurability. This fork strips things back. The goal here is a minimal, distraction-free file browser for a clean KOreader experience.
+Forked from [qewer33's KOReader Patches](https://github.com/qewer33/koreader-patches). The original repo has a lot more going on. This fork strips things back. The goal here is a minimal, distraction-free file browser for the cleanest KOreader experience.
 
-![cover](./assets/Cover.png)
+![cover](./assets/cover.jpg)
 
 ## Installation
 
@@ -33,3 +33,4 @@ Hides the subtitle row (home icon, folder path, plus icon) from the titlebar, re
 ```sh
 ./deploy_patch.sh
 ```
+===
